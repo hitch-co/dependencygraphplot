@@ -1,0 +1,13 @@
+redshift_user: 'FIRST_LAST'
+redshift_port: 5439
+
+staging:
+  redshift_host: 'YOUR_SERVER_URL'
+  redshift_dbname: 'YOUR_REDSHIFT_DB_NAME'
+  redshift_schemaname: 'YOUR_SCHEMA_NAME'
+
+# NOTE: integrate with replace schema name
+# production:
+#   redshift_host: 'YOUR_SERVER_URL'
+#   redshift_dbname: 'YOUR_REDSHIFT_DB_NAME'
+#   redshift_schemaname: 'YOUR_SCHEMA_NAME'

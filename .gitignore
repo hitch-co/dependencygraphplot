@@ -1,3 +1,9 @@
+# Repo specific
+config.yml
+sql/dag_tasks.sql
+files/df_response.csv
+files/df_tasks.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
