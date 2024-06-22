@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 class ForceDirectedGraph:
-    def __init__(self, items, attraction=0.1, repulsion=0.5, timestep=0.01, iterations=1000):
+    def __init__(self, items: list[dict], attraction=0.1, repulsion=0.5, timestep=0.01, iterations=1000):
         self.items = items
         self.attraction = attraction
         self.repulsion = repulsion
@@ -31,8 +31,9 @@ class ForceDirectedGraph:
         for item in self.items:
             node = item_map[item['item']]
             dependencies = item.get('dependencies', '')
-            if pd.isna(dependencies):
+            if pd.isna(dependencies) or dependencies == 'None':
                 dependencies = ''
+            dependencies = dependencies.strip('{}')
             for dep in dependencies.split(','):
                 dep = dep.strip()
                 if dep in item_map:
@@ -75,22 +76,25 @@ class ForceDirectedGraph:
             node.vx = 0
             node.vy = 0
 
-    def run(self):
+    def gen_list_of_tuples(self) -> list[tuple]:
         for _ in range(self.iterations):
             self._calculate_forces()
             self._update_positions()
         return [(node.item, node.x, node.y) for node in self.nodes]
+    
+    def gen_df(self) -> pd.DataFrame:
+        layout = self.gen_list_of_tuples()
+        return pd.DataFrame(layout, columns=['item', 'x', 'y'])
 
 # Example usage
 items = [
-    {"item": "Item1", "dependencies": "Item5,Item3"},
-    {"item": "Item2", "dependencies": "Item1,Item3,Item4"},
+    {"item": "Item1", "dependencies": "{Item5,Item3}"},
+    {"item": "Item2", "dependencies": "{Item1,Item3,Item4}"},
     {"item": "Item3", "dependencies": ""},
-    {"item": "Item4", "dependencies": "Item3"},
-    {"item": "Item5", "dependencies": "Item2,Item4"}
+    {"item": "Item4", "dependencies": "{Item3}"},
+    {"item": "Item5", "dependencies": "{Item2,Item4}"}
 ]
 
 graph = ForceDirectedGraph(items)
-layout = graph.run()
-for item, x, y in layout:
-    print(f"{item}: ({x:.2f}, {y:.2f})")
+layout = graph.gen_list_of_tuples()
+print(layout)
