@@ -3,12 +3,13 @@ import math
 import pandas as pd
 
 class ForceDirectedGraph:
-    def __init__(self, items: list[dict], attraction=0.1, repulsion=0.5, timestep=0.01, iterations=1000):
+    def __init__(self, items: list[dict], attraction=1, repulsion=3, timestep=0.01, iterations=5000, max_distance=10.0):
         self.items = items
         self.attraction = attraction
         self.repulsion = repulsion
         self.timestep = timestep
         self.iterations = iterations
+        self.max_distance = max_distance
         self.nodes = [self.Node(item['item']) for item in items]
         self.edges = []
         self._create_edges()
@@ -61,13 +62,15 @@ class ForceDirectedGraph:
                 distance = math.sqrt(dx * dx + dy * dy)
                 if distance == 0:
                     continue
-                force = self.repulsion / (distance * distance)
-                fx = force * dx / distance
-                fy = force * dy / distance
-                node1.vx -= fx
-                node1.vy -= fy
-                node2.vx += fx
-                node2.vy += fy
+                if distance < self.max_distance:  # Only apply repulsion within a maximum distance
+                    force = self.repulsion / (distance * distance)
+                    fx = force * dx / distance
+                    fy = force * dy / distance
+                    node1.vx -= fx
+                    node1.vy -= fy
+                    node2.vx += fx
+                    node2.vy += fy
+
 
     def _update_positions(self):
         for node in self.nodes:
@@ -82,10 +85,91 @@ class ForceDirectedGraph:
             self._update_positions()
         return [(node.item, node.x, node.y) for node in self.nodes]
     
-    def gen_df(self) -> pd.DataFrame:
+    def gen_nodes_df(self) -> pd.DataFrame:
         layout = self.gen_list_of_tuples()
         return pd.DataFrame(layout, columns=['item', 'x', 'y'])
+    
+    def gen_edges_df(self) -> pd.DataFrame:
+        edges_data = []
+        for edge in self.edges:
+            edges_data.append({
+                'source': edge.node1.item,
+                'target': edge.node2.item,
+                'x1': edge.node1.x,
+                'y1': edge.node1.y,
+                'x2': edge.node2.x,
+                'y2': edge.node2.y
+            })
+        return pd.DataFrame(edges_data)
 
+    def generate_intermediate_points(self, x1, y1, x2, y2, num_points=10):
+        points = []
+        for i in range(1, num_points):
+            t = i / num_points
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+            points.append((x, y))
+        return points
+
+    def transform_to_long_format(self, num_intermediate_points=10):
+        long_format_data = []
+        edges_df = self.gen_edges_df()
+        edges_list = edges_df.to_dict(orient="records")
+
+        for edge in edges_list:
+            # Append the source node (no step indicator)
+            long_format_data.append({
+                "task_name": edge["source"],
+                "x": edge["x1"],
+                "y": edge["y1"],
+                "path_order": 1,  # Source node is the first point in the path
+                "step": 0,  # Indicate this is a node
+                "type": "source",
+                "node_type": "node"
+            })
+
+            # Generate intermediate points
+            intermediate_points = self.generate_intermediate_points(edge["x1"], edge["y1"], edge["x2"], edge["y2"], num_points=num_intermediate_points)
+            
+            # Initialize path_order for intermediate points
+            path_order = 2  # Starts from 2 for the first intermediate point
+            step = 1  # Step starts from 1
+
+            # Append intermediate points with step indicators
+            for x, y in intermediate_points:
+                long_format_data.append({
+                    "task_name": edge["source"],  # Keep the task_name as the source task
+                    "x": x,
+                    "y": y,
+                    "path_order": path_order,  # path_order for intermediate points starts from 2
+                    "step": step,  # Step indicator starts from 1
+                    "type": "step",
+                    "node_type": "edge"
+                })
+                path_order += 1  # Increment path_order for each intermediate point
+                step += 1  # Increment step for each intermediate point
+            
+            # Append the target node (no step indicator)
+            long_format_data.append({
+                "task_name": edge["target"],
+                "x": edge["x2"],
+                "y": edge["y2"],
+                "path_order": path_order,  # Last path_order after intermediate points
+                "step": 0,  # Indicate this is a node
+                "type": "target",
+                "node_type": "node"
+            })
+        
+        # Convert the list to a DataFrame
+        df_long = pd.DataFrame(long_format_data)
+        return df_long
+
+
+###########################
+###########################
+###########################
+###########################
+###########################
 # Example usage
 items = [
     {"item": "Item1", "dependencies": "{Item5,Item3}"},
@@ -96,5 +180,58 @@ items = [
 ]
 
 graph = ForceDirectedGraph(items)
-layout = graph.gen_list_of_tuples()
-print(layout)
+nodes_df = graph.gen_nodes_df()
+edges_df = graph.gen_edges_df()
+
+# Print or save the dataframes to CSV files
+print(nodes_df)
+print(edges_df)
+
+nodes_df.to_csv('nodes.csv', index=False)
+edges_df.to_csv('edges.csv', index=False)
+
+
+###########################
+###########################
+###########################
+###########################
+###########################
+# Transform to long format
+long_format_data = []
+
+# gbefore the loop, format the df as a list of dictionaries
+# format edges_df as a list of dictionaries
+edges_list = edges_df.to_dict(orient="records")
+
+for edge in edges_list:
+    long_format_data.append({"item": edge["source"], "x": edge["x1"], "y": edge["y1"], "path_order": 1})
+    long_format_data.append({"item": edge["target"], "x": edge["x2"], "y": edge["y2"], "path_order": 2})
+
+# Create a DataFrame
+df_long = pd.DataFrame(long_format_data)
+
+# Save to CSV
+df_long.to_csv("edges_long_format.csv", index=False)
+
+
+###########################
+###########################
+###########################
+###########################
+###########################
+# Extract unique nodes and their coordinates
+nodes = {}
+for edge in edges_list:
+    nodes[edge["source"]] = (edge["x1"], edge["y1"])
+    nodes[edge["target"]] = (edge["x2"], edge["y2"])
+
+# Convert nodes dictionary to a DataFrame
+nodes_data = [{"item": item, "x": coords[0], "y": coords[1]} for item, coords in nodes.items()]
+df_nodes = pd.DataFrame(nodes_data)
+
+# Convert edges to DataFrame
+df_edges = pd.DataFrame(edges_list)
+
+# Save to CSV
+df_nodes.to_csv("nodes_new.csv", index=False)
+df_edges.to_csv("edges_new.csv", index=False)
