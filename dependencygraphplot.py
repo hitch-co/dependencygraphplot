@@ -1,24 +1,25 @@
 import random
 import math
 import pandas as pd
+import os
 
 class ForceDirectedGraph:
-    def __init__(self, items: list[dict], attraction=1, repulsion=3, timestep=0.01, iterations=5000, max_distance=10.0):
+    def __init__(self, items: list[dict], attraction=0.5, repulsion=2.0, timestep=0.01, iterations=10000, max_distance=10.0):
         self.items = items
         self.attraction = attraction
         self.repulsion = repulsion
         self.timestep = timestep
         self.iterations = iterations
         self.max_distance = max_distance
-        self.nodes = [self.Node(item['item']) for item in items]
+        self.nodes = [self.Node(item['task_name']) for item in items]
         self.edges = []
         self._create_edges()
 
     class Node:
         def __init__(self, item):
             self.item = item
-            self.x = random.uniform(-1, 1)
-            self.y = random.uniform(-1, 1)
+            self.x = random.uniform(-5, 5)  # Increased initial spread
+            self.y = random.uniform(-5, 5)  # Increased initial spread
             self.vx = 0
             self.vy = 0
 
@@ -30,8 +31,8 @@ class ForceDirectedGraph:
     def _create_edges(self):
         item_map = {node.item: node for node in self.nodes}
         for item in self.items:
-            node = item_map[item['item']]
-            dependencies = item.get('dependencies', '')
+            node = item_map[item['task_name']]
+            dependencies = item.get('depends_on', '')
             if pd.isna(dependencies) or dependencies == 'None':
                 dependencies = ''
             dependencies = dependencies.strip('{}')
@@ -70,7 +71,14 @@ class ForceDirectedGraph:
                     node1.vy -= fy
                     node2.vx += fx
                     node2.vy += fy
-
+                elif distance >= self.max_distance:  # Apply a minimal repulsion for larger distances
+                    force = self.repulsion / (self.max_distance * self.max_distance)
+                    fx = force * dx / distance
+                    fy = force * dy / distance
+                    node1.vx -= fx * 0.1  # Apply a smaller force
+                    node1.vy -= fy * 0.1
+                    node2.vx += fx * 0.1
+                    node2.vy += fy * 0.1
 
     def _update_positions(self):
         for node in self.nodes:
@@ -78,6 +86,9 @@ class ForceDirectedGraph:
             node.y += node.vy * self.timestep
             node.vx = 0
             node.vy = 0
+            # Constrain positions to stay within a certain range to avoid clustering
+            node.x = max(min(node.x, 5), -5)
+            node.y = max(min(node.y, 5), -5)
 
     def gen_list_of_tuples(self) -> list[tuple]:
         for _ in range(self.iterations):
@@ -101,7 +112,7 @@ class ForceDirectedGraph:
                 'y2': edge.node2.y
             })
         return pd.DataFrame(edges_data)
-
+    
     def generate_intermediate_points(self, x1, y1, x2, y2, num_points=10):
         points = []
         for i in range(1, num_points):
@@ -165,73 +176,39 @@ class ForceDirectedGraph:
         return df_long
 
 
+
+
 ###########################
 ###########################
 ###########################
 ###########################
 ###########################
 # Example usage
+import os
 items = [
-    {"item": "Item1", "dependencies": "{Item5,Item3}"},
-    {"item": "Item2", "dependencies": "{Item1,Item3,Item4}"},
-    {"item": "Item3", "dependencies": ""},
-    {"item": "Item4", "dependencies": "{Item3}"},
-    {"item": "Item5", "dependencies": "{Item2,Item4}"}
+    {"task_name": "TASK-1", "depends_on": "{TASK-7}"},
+    {"task_name": "TASK-2", "depends_on": "{TASK-8}"},
+    {"task_name": "TASK-3", "depends_on": "{TASK-9}"},
+    {"task_name": "TASK-4", "depends_on": ""},
+    {"task_name": "TASK-5", "depends_on": "{TASK-7}"},
+    {"task_name": "TASK-6", "depends_on": "{TASK-8}"},
+    {"task_name": "TASK-7", "depends_on": "{TASK-9}"},
+    {"task_name": "TASK-8", "depends_on": ""},
+    {"task_name": "TASK-9", "depends_on": ""},
+    {"task_name": "TASK-10", "depends_on": ""},
+    {"task_name": "TASK-11", "depends_on": ""},
+    {"task_name": "TASK-12", "depends_on": "{TASK-7,TASK-10,TASK-8,TASK-11,TASK-9,TASK-13}"},
+    {"task_name": "TASK-13", "depends_on": ""},
+    {"task_name": "TASK-14", "depends_on": ""},
+    {"task_name": "TASK-15", "depends_on": "{TASK-12}"},
+    {"task_name": "TASK-16", "depends_on": "{TASK-12}"}
 ]
 
 graph = ForceDirectedGraph(items)
 nodes_df = graph.gen_nodes_df()
 edges_df = graph.gen_edges_df()
+df_long = graph.transform_to_long_format()
 
-# Print or save the dataframes to CSV files
-print(nodes_df)
-print(edges_df)
-
-nodes_df.to_csv('nodes.csv', index=False)
-edges_df.to_csv('edges.csv', index=False)
-
-
-###########################
-###########################
-###########################
-###########################
-###########################
-# Transform to long format
-long_format_data = []
-
-# gbefore the loop, format the df as a list of dictionaries
-# format edges_df as a list of dictionaries
-edges_list = edges_df.to_dict(orient="records")
-
-for edge in edges_list:
-    long_format_data.append({"item": edge["source"], "x": edge["x1"], "y": edge["y1"], "path_order": 1})
-    long_format_data.append({"item": edge["target"], "x": edge["x2"], "y": edge["y2"], "path_order": 2})
-
-# Create a DataFrame
-df_long = pd.DataFrame(long_format_data)
-
-# Save to CSV
-df_long.to_csv("edges_long_format.csv", index=False)
-
-
-###########################
-###########################
-###########################
-###########################
-###########################
-# Extract unique nodes and their coordinates
-nodes = {}
-for edge in edges_list:
-    nodes[edge["source"]] = (edge["x1"], edge["y1"])
-    nodes[edge["target"]] = (edge["x2"], edge["y2"])
-
-# Convert nodes dictionary to a DataFrame
-nodes_data = [{"item": item, "x": coords[0], "y": coords[1]} for item, coords in nodes.items()]
-df_nodes = pd.DataFrame(nodes_data)
-
-# Convert edges to DataFrame
-df_edges = pd.DataFrame(edges_list)
-
-# Save to CSV
-df_nodes.to_csv("nodes_new.csv", index=False)
-df_edges.to_csv("edges_new.csv", index=False)
+nodes_df.to_csv(os.path.join(os.getcwd(), 'files', 'nodes.csv'), index=False)
+edges_df.to_csv(os.path.join(os.getcwd(), 'files', 'edges.csv'), index=False)
+df_long.to_csv(os.path.join(os.getcwd(), 'files', 'edges_long_format.csv'), index=False)

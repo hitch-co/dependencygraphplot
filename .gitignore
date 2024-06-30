@@ -1,8 +1,7 @@
 # Repo specific
 config.yml
 sql/dag_tasks.sql
-files/df_response.csv
-files/df_tasks.csv
+files/*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -166,3 +165,4 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
